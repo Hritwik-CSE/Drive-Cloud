@@ -1,13 +1,9 @@
 // ========================================
 // CloudMount – Authentication Module
 // ========================================
-// Handles OAuth 2.0 flows for each cloud provider.
-// Currently uses simulated auth. Replace the simulated
-// functions with real OAuth when you have API credentials.
 
 import { config } from '../config.js';
 
-// In-memory token store (backed by localStorage for persistence)
 const TOKEN_STORAGE_KEY = 'cloudmount_tokens';
 
 function loadTokens() {
@@ -35,24 +31,28 @@ function simulateDelay() {
 async function simulatedLogin(provider) {
   await simulateDelay();
   // Simulate a successful OAuth response
+  const email = getSimulatedEmail(provider) + `+${Date.now()}@cloud.com`; 
+  const id = `${provider}_${email}`;
+  
   const fakeToken = {
+    id,
     accessToken: `simulated_${provider}_token_${Date.now()}`,
     refreshToken: `simulated_${provider}_refresh_${Date.now()}`,
-    expiresAt: Date.now() + 3600 * 1000, // 1 hour
+    expiresAt: Date.now() + 3600 * 1000,
     provider,
-    email: getSimulatedEmail(provider),
+    email,
   };
-  tokens[provider] = fakeToken;
+  tokens[id] = fakeToken;
   saveTokens(tokens);
   return fakeToken;
 }
 
 function getSimulatedEmail(provider) {
   const emails = {
-    gdrive: 'user@gmail.com',
-    mega: 'user@mega.nz',
+    gdrive: 'user',
+    mega: 'user',
   };
-  return emails[provider] || 'user@cloud.com';
+  return emails[provider] || 'user';
 }
 
 // ── Real OAuth (stubs – fill in with real SDK calls) ───
@@ -76,27 +76,28 @@ async function loginWithGoogle() {
           reject(new Error(response.error));
           return;
         }
-        const token = {
-          accessToken: response.access_token,
-          refreshToken: null, // Google GIS doesn't provide refresh tokens in browser
-          expiresAt: Date.now() + response.expires_in * 1000,
-          provider: 'gdrive',
-          email: null, // We'll fetch this after login
-        };
-        tokens['gdrive'] = token;
-        saveTokens(tokens);
-
-        // Fetch user email
+        
+        // Fetch user email to use as ID
         fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
-          headers: { Authorization: `Bearer ${token.accessToken}` },
+          headers: { Authorization: `Bearer ${response.access_token}` },
         })
           .then(res => res.json())
           .then(data => {
-            token.email = data.user.emailAddress;
+            const email = data.user.emailAddress;
+            const id = `gdrive_${email}`;
+            const token = {
+              id,
+              accessToken: response.access_token,
+              refreshToken: null,
+              expiresAt: Date.now() + response.expires_in * 1000,
+              provider: 'gdrive',
+              email: email,
+            };
+            tokens[id] = token;
             saveTokens(tokens);
-          });
-
-        resolve(token);
+            resolve(token);
+          })
+          .catch(err => reject(new Error('Failed to fetch user email')));
       },
       error_callback: (err) => {
         reject(new Error(err?.type === 'popup_closed' ? 'Login cancelled' : 'Google Login Failed'));
@@ -105,7 +106,6 @@ async function loginWithGoogle() {
     client.requestAccessToken();
   });
 }
-
 
 // ── Public API ─────────────────────────────────────────
 
@@ -116,33 +116,47 @@ export async function login(provider) {
   return realLogin(provider);
 }
 
-export async function logout(provider) {
+export async function logout(id) {
   if (config.useSimulatedApi) {
     await simulateDelay();
   }
-  delete tokens[provider];
+  delete tokens[id];
   saveTokens(tokens);
 }
 
-export function getToken(provider) {
-  const token = tokens[provider];
+export function getToken(id) {
+  const token = tokens[id];
   if (!token) return null;
 
-  // Check expiry
   if (token.expiresAt && Date.now() > token.expiresAt) {
-    // Token expired – in real use, attempt a refresh here
-    delete tokens[provider];
+    delete tokens[id];
     saveTokens(tokens);
     return null;
   }
   return token.accessToken;
 }
 
-export function isAuthenticated(provider) {
-  return !!getToken(provider);
+export function isAuthenticated(id) {
+  return !!getToken(id);
 }
 
-export function getAuthEmail(provider) {
-  const token = tokens[provider];
+export function getAuthEmail(id) {
+  const token = tokens[id];
   return token ? token.email : null;
 }
+
+export function getAllTokens() {
+  // Validate expiry and return all valid tokens
+  const activeTokens = [];
+  for (const id in tokens) {
+    const t = tokens[id];
+    if (t.expiresAt && Date.now() > t.expiresAt) {
+      delete tokens[id];
+    } else {
+      activeTokens.push(t);
+    }
+  }
+  saveTokens(tokens);
+  return activeTokens;
+}
+
