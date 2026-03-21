@@ -119,7 +119,6 @@ const app = {
   renderBottomNav() {
     const tabs = [
       { id: 'drives', icon: icons.drives, label: 'Drives' },
-      { id: 'files', icon: icons.files, label: 'Files' },
       { id: 'storage', icon: icons.storage, label: 'Storage' },
       { id: 'accounts', icon: icons.user, label: 'Accounts' },
       { id: 'settings', icon: icons.settings, label: 'Settings' },
