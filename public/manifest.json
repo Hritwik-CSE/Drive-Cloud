@@ -1,0 +1,17 @@
+{
+  "name": "CloudMount",
+  "short_name": "CloudMount",
+  "description": "Use your cloud storage as USB drives on your phone",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0a1a",
+  "background_color": "#0a0a1a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%236C5CE7'/><path d='M20 38V26a12 12 0 0124 0v12' stroke='white' stroke-width='3'/><rect x='16' y='36' width='32' height='12' rx='4' fill='white' opacity='.9'/></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
