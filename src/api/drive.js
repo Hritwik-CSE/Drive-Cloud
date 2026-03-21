@@ -303,10 +303,9 @@ export async function uploadFiles(driveId, path, fileList) {
 export async function getStreamUrl(driveId, fileName, path = []) {
   if (config.useSimulatedApi) {
     await simulateDelay();
-    // Map to sample video URLs
     const videoIndex = fileName.toLowerCase().includes('bunny') ? 0
       : fileName.toLowerCase().includes('elephant') ? 1
-        : fileName.toLowerCase().includes('blaze') ? 2 : 0;
+      : fileName.toLowerCase().includes('blaze') ? 2 : 0;
     return mockGetVideoUrl(videoIndex);
   } else {
     const token = requireAuth(driveId);
@@ -314,11 +313,13 @@ export async function getStreamUrl(driveId, fileName, path = []) {
     const item = await findItemByName(token, parentId, fileName);
     if (!item) throw new Error('File not found');
 
-    // Access token passed directly via URL so the video player can stream securely without needing custom fetch headers
-    return `https://www.googleapis.com/drive/v3/files/${item.id}?alt=media&access_token=${token}`;
+    // 👉 DO NOT return URL directly anymore
+    return {
+      fileId: item.id,
+      token: token
+    };
   }
 }
-
 // ── Drive Connection ───────────────────────────────────
 
 export async function connectDrive(driveId) {
