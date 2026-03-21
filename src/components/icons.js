@@ -74,6 +74,8 @@ export const icons = {
   link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
 
   emptyFolder: `<svg viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="10" y="20" width="60" height="45" rx="4" opacity="0.3"/><path d="M10 28h60M10 24c0-2.2 1.8-4 4-4h16l4 4h22c2.2 0 4 1.8 4 4" opacity="0.3"/><line x1="32" y1="42" x2="48" y2="42" opacity="0.5"/><line x1="40" y1="34" x2="40" y2="50" opacity="0.5"/></svg>`,
+
+  logout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
 };
 
 export function getFileIcon(type) {
