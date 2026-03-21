@@ -314,12 +314,8 @@ export async function getStreamUrl(driveId, fileName, path = []) {
     const item = await findItemByName(token, parentId, fileName);
     if (!item) throw new Error('File not found');
 
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${item.id}?fields=webContentLink`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const data = await res.json();
-    return data.webContentLink;
+    // Access token passed directly via URL so the video player can stream securely without needing custom fetch headers
+    return `https://www.googleapis.com/drive/v3/files/${item.id}?alt=media&access_token=${token}`;
   }
 }
 
