@@ -52,32 +52,6 @@ export function renderVideoPlayer(app) {
   `;
 }
 
-const videoEl = document.getElementById('videoEl');
-if (!videoEl) return;
-
-const { fileId, token } = app.state.params.streamUrl || {};
-
-if (fileId && token) {
-  fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  })
-    .then(res => res.blob())
-    .then(blob => {
-      const blobUrl = URL.createObjectURL(blob);
-      videoEl.src = blobUrl;
-
-      initPlayer(videoEl); // 👈 call player init here
-    })
-    .catch(err => {
-      console.error(err);
-      app.showToast('Failed to load video');
-    });
-
-  return; // stop normal flow
-}
-
 export function bindVideoEvents(app) {
   if (app.state.videoLoading) {
     const closeBtn = document.getElementById('videoClose');
@@ -98,7 +72,6 @@ export function bindVideoEvents(app) {
   const wrapper = document.getElementById('videoTransformWrapper');
   const header = document.getElementById('videoHeader');
 
-  function initPlayer(videoEl) {
   player = new Plyr(videoEl, {
     controls: [
       'play-large', 'play', 'progress', 'current-time', 'duration',
@@ -112,7 +85,6 @@ export function bindVideoEvents(app) {
   player.on('ready', () => {
     player.play().catch(() => {});
   });
-}
 
   // Simple auto-hide for our custom header (Plyr handles its own controls)
   let headerTimeout;
