@@ -192,24 +192,10 @@ export function bindFileBrowserEvents(app) {
         app.state.path = [...(app.state.path || []), name];
         await loadFiles(app);
       } else if (type === 'video') {
-        app.showToast('Fetching video stream...');
-        app.state.filesLoading = true;
-        app.render();
-        import('../api/drive.js').then(async ({ getStreamUrl }) => {
-          try {
-            const url = await getStreamUrl(app.state.params.driveId, name, app.state.path);
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            a.click();
-          } catch (err) {
-            app.showToast('Failed to play video');
-            console.error(err);
-          } finally {
-            app.state.filesLoading = false;
-            app.render();
-          }
+        app.navigate('video', { 
+          driveId: app.state.params.driveId, 
+          fileName: name, 
+          path: app.state.path 
         });
       } else {
         app.showFileSheet(name, type);
