@@ -18,7 +18,7 @@ export function renderVideoPlayer(app) {
     return `
       <div class="video-player-wrapper loading-state" id="videoWrapper" style="position:fixed; inset:0; background:black; z-index:100; display:flex; flex-direction:column;">
         <div class="video-player-header" id="videoHeader" style="padding:16px; display:flex; align-items:center;">
-          <button class="video-btn" id="videoClose" style="background:rgba(255,255,255,0.1); border:none; color:white; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">${icons.back || '<svg width="24" height="24" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>'}</button>
+          <button class="video-btn" id="videoClose" title="Exit Player" style="background:rgba(255,255,255,0.1); border:none; color:white; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">${icons.close || '<svg width="24" height="24" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>'}</button>
           <div class="video-title" style="color:white; flex:1; padding-left:16px;">${fileName}</div>
         </div>
         <div class="loading-container" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center;">
@@ -34,7 +34,7 @@ export function renderVideoPlayer(app) {
   return `
     <div class="video-player-wrapper" id="videoWrapper" style="position:fixed; inset:0; background:black; z-index:100; display:flex; flex-direction:column;">
       <div class="video-player-header" id="videoHeader" style="position:absolute; top:0; left:0; right:0; padding:16px; display:flex; align-items:center; z-index:10; background:linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);">
-        <button class="video-btn" id="videoClose" style="background:rgba(255,255,255,0.2); border:none; color:white; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer;">${icons.back || '<svg width="24" height="24" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>'}</button>
+        <button class="video-btn" id="videoClose" title="Exit Player" style="background:rgba(255,255,255,0.2); border:none; color:white; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer;">${icons.close || '<svg width="24" height="24" stroke="currentColor" fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>'}</button>
         <div class="video-title" style="color:white; flex:1; padding:0 16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500;">${fileName}</div>
         <button class="video-btn" id="videoRotate" title="Rotate Video" style="background:rgba(255,255,255,0.2); border:none; color:white; border-radius:50%; width:40px; height:40px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
