@@ -7,6 +7,7 @@ import { renderFileBrowser, bindFileBrowserEvents, loadFiles } from './component
 import { renderVideoPlayer, bindVideoEvents, cleanupVideoPlayer } from './components/VideoPlayer.js';
 import { renderStorageDashboard, bindStorageEvents, loadStorage } from './components/StorageDashboard.js';
 import { renderSettings, bindSettingsEvents } from './components/Settings.js';
+import { renderAccounts, bindAccountsEvents } from './components/Accounts.js';
 import { icons } from './components/icons.js';
 import { renameItem, deleteItem, createFolder, uploadFiles, getStreamUrl } from './api/drive.js';
 
@@ -92,6 +93,7 @@ const app = {
       case 'files': content = renderFileBrowser(this); break;
       case 'video': content = renderVideoPlayer(this); break;
       case 'storage': content = renderStorageDashboard(this); break;
+      case 'accounts': content = renderAccounts(this); break;
       case 'settings': content = renderSettings(this); break;
     }
 
@@ -119,6 +121,7 @@ const app = {
       { id: 'drives', icon: icons.drives, label: 'Drives' },
       { id: 'files', icon: icons.files, label: 'Files' },
       { id: 'storage', icon: icons.storage, label: 'Storage' },
+      { id: 'accounts', icon: icons.user, label: 'Accounts' },
       { id: 'settings', icon: icons.settings, label: 'Settings' },
     ];
 
@@ -156,6 +159,7 @@ const app = {
       case 'drives': bindDriveEvents(this); break;
       case 'files': bindFileBrowserEvents(this); break;
       case 'storage': bindStorageEvents(this); break;
+      case 'accounts': bindAccountsEvents(this); break;
       case 'settings': bindSettingsEvents(this); break;
     }
   },
