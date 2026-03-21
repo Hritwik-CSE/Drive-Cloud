@@ -6,7 +6,7 @@
 // methods with real fetch() calls when you have API credentials.
 
 import { config } from '../config.js';
-import { getToken, isAuthenticated } from './auth.js';
+import { getToken, isAuthenticated, getAllTokens } from './auth.js';
 import { drives as mockDrives, fileSystems as mockFileSystems, storageBreakdown as mockStorageBreakdown, getVideoUrl as mockGetVideoUrl } from '../data/mockData.js';
 
 // ── Helpers ────────────────────────────────────────────
@@ -30,38 +30,45 @@ function requireAuth(provider) {
 export async function fetchDrives() {
   if (config.useSimulatedApi) {
     await simulateDelay();
-    return [...mockDrives];
+    const tokens = getAllTokens();
+    const drives = tokens.map(t => ({
+      id: t.id,
+      name: t.provider === 'gdrive' ? 'Google Drive' : (t.provider === 'mega' ? 'MEGA' : t.provider),
+      email: t.email,
+      icon: t.provider === 'gdrive' ? '🟦' : (t.provider === 'mega' ? 'Ⓜ️' : '☁️'),
+      color: t.provider === 'gdrive' ? '#cccccc' : '#d84545',
+      connected: true,
+      usedGB: 4.5,
+      totalGB: 15.0,
+    }));
+    return drives;
   } else {
     // Inside the else branch of fetchDrives()
     const drives = [];
+    const tokens = getAllTokens().filter(t => t.provider === 'gdrive');
 
-    if (isAuthenticated('gdrive')) {
-      const res = await fetch(
-        'https://www.googleapis.com/drive/v3/about?fields=user,storageQuota',
-        { headers: { Authorization: `Bearer ${getToken('gdrive')}` } }
-      );
-      const data = await res.json();
-      drives.push({
-        id: 'gdrive',
-        name: 'Google Drive',
-        email: data.user.emailAddress,
-        icon: '🟦',
-        color: '#cccccc',
-        connected: true,
-        usedGB: Number(data.storageQuota.usage) / 1e9,
-        totalGB: Number(data.storageQuota.limit) / 1e9,
-      });
-    } else {
-      drives.push({
-        id: 'gdrive',
-        name: 'Google Drive',
-        email: '',
-        icon: '🟦',
-        color: '#cccccc',
-        connected: false,
-        usedGB: 0,
-        totalGB: 0,
-      });
+    for (const tokenObj of tokens) {
+      if (isAuthenticated(tokenObj.id)) {
+        try {
+          const res = await fetch(
+            'https://www.googleapis.com/drive/v3/about?fields=storageQuota',
+            { headers: { Authorization: `Bearer ${getToken(tokenObj.id)}` } }
+          );
+          const data = await res.json();
+          drives.push({
+            id: tokenObj.id,
+            name: 'Google Drive',
+            email: tokenObj.email,
+            icon: '🟦',
+            color: '#cccccc',
+            connected: true,
+            usedGB: Number(data.storageQuota.usage) / 1e9,
+            totalGB: Number(data.storageQuota.limit) / 1e9,
+          });
+        } catch (err) {
+          console.error('Failed to fetch storage for', tokenObj.email, err);
+        }
+      }
     }
 
     return drives;
@@ -107,9 +114,10 @@ export async function fetchStorageBreakdown(driveId) {
 // ── File Browsing ──────────────────────────────────────
 
 export async function fetchContents(driveId, path = []) {
+  const provider = driveId.split('_')[0]; // Extract provider from id, e.g. gdrive
   if (config.useSimulatedApi) {
     await simulateDelay();
-    let items = mockFileSystems[driveId] || [];
+    let items = mockFileSystems[provider] || [];
     for (const p of path) {
       const found = items.find(item => item.isFolder && item.name === p);
       if (found && found.children) {
@@ -302,11 +310,7 @@ export async function getStreamUrl(driveId, fileName) {
 export async function connectDrive(driveId) {
   if (config.useSimulatedApi) {
     await simulateDelay();
-    const drive = mockDrives.find(d => d.id === driveId);
-    if (drive) {
-      drive.connected = true;
-    }
-    return drive;
+    return { id: driveId, connected: true };
   }
 
   // In real use, this is handled by the auth flow
@@ -316,11 +320,7 @@ export async function connectDrive(driveId) {
 export async function disconnectDrive(driveId) {
   if (config.useSimulatedApi) {
     await simulateDelay();
-    const drive = mockDrives.find(d => d.id === driveId);
-    if (drive) {
-      drive.connected = false;
-    }
-    return drive;
+    return { id: driveId, connected: false };
   }
 
   // In real use, we just forget the token (already handled in auth.js logout)
@@ -330,7 +330,8 @@ export async function disconnectDrive(driveId) {
 // ── Internal helper to get mutable reference to mock items ──
 
 function getItemsRef(driveId, path) {
-  let items = mockFileSystems[driveId] || [];
+  const provider = driveId.split('_')[0];
+  let items = mockFileSystems[provider] || [];
   for (const p of path) {
     const found = items.find(item => item.isFolder && item.name === p);
     if (found && found.children) items = found.children;
