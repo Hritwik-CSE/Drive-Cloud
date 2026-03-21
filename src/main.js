@@ -1,144 +1,432 @@
 // ========================================
-// CloudMount – Drive Manager (Home Screen)
+// CloudMount – Main Application
 // ========================================
 
-import { icons } from './icons.js';
-import { fetchDrives } from '../api/drive.js';
+import { renderDriveManager, bindDriveEvents, loadDrives } from './components/DriveManager.js';
+import { renderFileBrowser, bindFileBrowserEvents, loadFiles } from './components/FileBrowser.js';
+import { renderVideoPlayer, bindVideoEvents, cleanupVideoPlayer } from './components/VideoPlayer.js';
+import { renderStorageDashboard, bindStorageEvents, loadStorage } from './components/StorageDashboard.js';
+import { renderSettings, bindSettingsEvents } from './components/Settings.js';
+import { renderAccounts, bindAccountsEvents } from './components/Accounts.js';
+import { icons } from './components/icons.js';
+import { renameItem, deleteItem, createFolder, uploadFiles, getStreamUrl } from './api/drive.js';
 
-// Cache drives so we can re-render without re-fetching
-let cachedDrives = [];
+function escapeHTML(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
 
-export function renderDriveManager(app) {
-  // If we're in a loading state, show skeleton
-  if (app.state.drivesLoading) {
+const app = {
+  isInitialLoad: true,
+
+  state: {
+    currentView: 'drives',
+    params: {},
+    path: [],
+    viewMode: 'grid',
+    drivesLoading: false,
+    filesLoading: false,
+    storageLoading: false,
+    videoLoading: false,
+    operationLoading: false,
+    settings: {
+      autoSync: true,
+      wifiOnly: false,
+      gridDefault: true,
+      thumbnails: true,
+      autoPlay: true,
+      pipEnabled: true,
+    },
+  },
+
+  async navigate(view, params = {}) {
+    if (this.state.currentView === 'video') {
+      cleanupVideoPlayer();
+    }
+    this.state.currentView = view;
+    this.state.params = params;
+    if (view === 'files' && !params.preservePath) {
+      this.state.path = params.path || [];
+    }
+
+    // Trigger async data loading for views that need it
+    switch (view) {
+      case 'drives':
+        await loadDrives(this);
+        break;
+      case 'files':
+        await loadFiles(this);
+        break;
+      case 'storage':
+        await loadStorage(this);
+        break;
+      case 'video':
+        await this.loadVideo(params);
+        break;
+      default:
+        this.render();
+    }
+  },
+
+  async loadVideo(params) {
+    this.state.videoLoading = true;
+    this.render();
+
+    try {
+      const streamUrl = await getStreamUrl(params.driveId, params.fileName);
+      this.state.params.streamUrl = streamUrl;
+    } catch (err) {
+      this.showToast(`Error loading video: ${err.message}`);
+    }
+
+    this.state.videoLoading = false;
+    this.render();
+  },
+
+  render() {
+    const root = document.getElementById('app');
+    const isVideo = this.state.currentView === 'video';
+    let content = '';
+
+    switch (this.state.currentView) {
+      case 'drives': content = renderDriveManager(this); break;
+      case 'files': content = renderFileBrowser(this); break;
+      case 'video': content = renderVideoPlayer(this); break;
+      case 'storage': content = renderStorageDashboard(this); break;
+      case 'accounts': content = renderAccounts(this); break;
+      case 'settings': content = renderSettings(this); break;
+    }
+
+    if (isVideo) {
+      root.innerHTML = content;
+      bindVideoEvents(this);
+      return;
+    }
+
+    const shellClass = this.isInitialLoad ? 'app-shell initial-load' : 'app-shell';
+    root.innerHTML = `
+      <div class="${shellClass}">
+        ${content}
+      </div>
+      ${this.renderBottomNav()}
+      <div class="toast" id="toast"></div>
+    `;
+    this.isInitialLoad = false;
+
+    this.bindEvents();
+  },
+
+  renderBottomNav() {
+    const tabs = [
+      { id: 'drives', icon: icons.drives, label: 'Drives' },
+      { id: 'files', icon: icons.files, label: 'Files' },
+      { id: 'storage', icon: icons.storage, label: 'Storage' },
+      { id: 'accounts', icon: icons.user, label: 'Accounts' },
+      { id: 'settings', icon: icons.settings, label: 'Settings' },
+    ];
+
     return `
-      <div class="app-header">
-        <div class="header-inner">
-          <h1 class="header-title"><span>Cloud</span>Mount</h1>
-          <div class="header-actions">
-            <button class="icon-btn" id="searchBtn" aria-label="Search">${icons.search}</button>
-          </div>
+      <nav class="bottom-nav">
+        <div class="nav-items">
+          ${tabs.map(tab => `
+            <button class="nav-item ${this.state.currentView === tab.id ? 'active' : ''}" 
+                    data-tab="${tab.id}" id="nav-${tab.id}">
+              ${tab.icon}
+              <span>${tab.label}</span>
+            </button>
+          `).join('')}
+        </div>
+      </nav>
+    `;
+  },
+
+  bindEvents() {
+    // Bottom nav
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        if (tab === 'files') {
+          const driveId = this.state.params.driveId || 'gdrive';
+          this.navigate('files', { driveId });
+        } else {
+          this.navigate(tab);
+        }
+      });
+    });
+
+    // Bind view-specific events
+    switch (this.state.currentView) {
+      case 'drives': bindDriveEvents(this); break;
+      case 'files': bindFileBrowserEvents(this); break;
+      case 'storage': bindStorageEvents(this); break;
+      case 'accounts': bindAccountsEvents(this); break;
+      case 'settings': bindSettingsEvents(this); break;
+    }
+  },
+
+  showToast(message) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+  },
+
+  showFileSheet(fileName, fileType) {
+    const existing = document.querySelector('.sheet-overlay');
+    if (existing) existing.remove();
+    const existingSheet = document.querySelector('.bottom-sheet');
+    if (existingSheet) existingSheet.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    
+    const sheet = document.createElement('div');
+    sheet.className = 'bottom-sheet';
+    sheet.innerHTML = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div class="sheet-file-icon file-icon ${fileType}">
+          ${icons[fileType] || icons.files}
+        </div>
+        <div>
+          <div class="sheet-file-name">${escapeHTML(fileName)}</div>
+          <div class="sheet-file-meta">${fileType}</div>
         </div>
       </div>
-      <div class="app-content">
-        <div class="loading-container animate-in">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">Loading drives...</div>
+      <div class="sheet-actions">
+        <button class="sheet-action" data-action="download">
+          ${icons.download} <span>Download</span>
+        </button>
+        <button class="sheet-action" data-action="share">
+          ${icons.share} <span>Share</span>
+        </button>
+        <button class="sheet-action" data-action="copy">
+          ${icons.copy} <span>Copy to...</span>
+        </button>
+        <button class="sheet-action" data-action="move">
+          ${icons.move} <span>Move to...</span>
+        </button>
+        <button class="sheet-action" data-action="rename">
+          ${icons.rename} <span>Rename</span>
+        </button>
+        <button class="sheet-action" data-action="info">
+          ${icons.info} <span>Details</span>
+        </button>
+        <button class="sheet-action danger" data-action="delete">
+          ${icons.trash} <span>Delete</span>
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const closeSheet = () => {
+      overlay.remove();
+      sheet.remove();
+    };
+
+    overlay.addEventListener('click', closeSheet);
+
+    sheet.querySelectorAll('.sheet-action').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        closeSheet();
+        if (action === 'rename') {
+          this.showRenameDialog(fileName);
+        } else if (action === 'delete') {
+          this.handleDeleteFile(fileName);
+        } else {
+          this.showToast(`${action} — ${fileName}`);
+        }
+      });
+    });
+  },
+
+  showUploadSheet() {
+    const existing = document.querySelector('.sheet-overlay');
+    if (existing) existing.remove();
+    const existingSheet = document.querySelector('.bottom-sheet');
+    if (existingSheet) existingSheet.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'bottom-sheet';
+    sheet.innerHTML = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-actions">
+        <button class="sheet-action" data-action="upload">
+          ${icons.upload} <span>Upload file</span>
+        </button>
+        <button class="sheet-action" data-action="newfolder">
+          ${icons.folderPlus} <span>New folder</span>
+        </button>
+      </div>
+      <div class="upload-area" id="uploadArea">
+        ${icons.upload}
+        <div class="upload-area-text">Tap to select files</div>
+        <div class="upload-area-sub">or drag and drop</div>
+        <input type="file" id="fileInput" multiple hidden>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const closeSheet = () => { overlay.remove(); sheet.remove(); };
+    overlay.addEventListener('click', closeSheet);
+
+    const uploadArea = sheet.querySelector('#uploadArea');
+    const fileInput = sheet.querySelector('#fileInput');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async (e) => {
+      if (e.target.files.length > 0) {
+        closeSheet();
+        this.showToast(`Uploading ${e.target.files.length} file(s)...`);
+
+        try {
+          const driveId = this.state.params.driveId;
+          await uploadFiles(driveId, this.state.path, e.target.files);
+          this.showToast('Upload complete!');
+          await loadFiles(this);
+        } catch (err) {
+          this.showToast(`Upload failed: ${err.message}`);
+        }
+      }
+    });
+
+    sheet.querySelector('[data-action="newfolder"]').addEventListener('click', () => {
+      closeSheet();
+      this.showNewFolderDialog();
+    });
+
+    sheet.querySelector('[data-action="upload"]').addEventListener('click', () => {
+      fileInput.click();
+    });
+  },
+
+  showRenameDialog(oldName) {
+    const overlay = document.createElement('div');
+    overlay.className = 'dialog-overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <div class="dialog-title">Rename</div>
+        <input type="text" class="dialog-input" id="renameInput" value="${escapeHTML(oldName)}">
+        <div class="dialog-actions">
+          <button class="dialog-btn cancel" id="renameCancel">Cancel</button>
+          <button class="dialog-btn confirm" id="renameConfirm">Rename</button>
         </div>
       </div>
     `;
-  }
+    document.body.appendChild(overlay);
 
-  const drives = cachedDrives;
-  const totalUsed = drives.filter(d => d.connected).reduce((s, d) => s + d.usedGB, 0);
-  const totalSpace = drives.filter(d => d.connected).reduce((s, d) => s + d.totalGB, 0);
-  const connectedCount = drives.filter(d => d.connected).length;
+    const input = document.getElementById('renameInput');
+    input.focus();
+    input.select();
 
-  return `
-    <div class="app-header">
-      <div class="header-inner">
-        <h1 class="header-title"><span>Cloud</span>Mount</h1>
-        <div class="header-actions">
-          <button class="icon-btn" id="searchBtn" aria-label="Search">${icons.search}</button>
-        </div>
-      </div>
-    </div>
-    <div class="app-content">
-      <div class="quick-stats animate-in">
-        <div class="stat-card">
-          <div class="stat-value">${connectedCount}</div>
-          <div class="stat-label">Drives</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${totalUsed.toFixed(1)}</div>
-          <div class="stat-label">GB Used</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">${(totalSpace - totalUsed).toFixed(1)}</div>
-          <div class="stat-label">GB Free</div>
-        </div>
-      </div>
-
-      <div class="section-title">Connected Drives</div>
-      <div class="drives-grid">
-        ${drives.length > 0 ? drives.map((drive, i) => renderDriveCard(drive, i)).join('') : '<div style="color: var(--text-muted); font-size: var(--font-sm);">No drives connected. Go to Accounts to add one.</div>'}
-      </div>
-    </div>
-  `;
-}
-
-function renderDriveCard(drive, index) {
-  const pct = drive.totalGB > 0 ? ((drive.usedGB / drive.totalGB) * 100) : 0;
-  const statusClass = drive.connected ? 'connected' : 'disconnected';
-  const statusText = drive.connected ? 'Connected' : 'Disconnected';
-  const safeName = String(drive.name || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const safeEmail = String(drive.email || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
-  return `
-    <div class="drive-card animate-in stagger-${index + 1}" 
-         style="--drive-color: ${drive.color};"
-         data-drive-id="${drive.id}"
-         id="drive-card-${drive.id}">
-      <span class="usb-badge">USB</span>
-      <div class="drive-card-header">
-        <div class="drive-info">
-          <div class="drive-icon">${drive.icon}</div>
-          <div>
-            <div class="drive-name">${safeName}</div>
-            <div class="drive-email">${safeEmail}</div>
-          </div>
-        </div>
-      </div>
-      <div class="drive-status ${statusClass}">
-        <span class="status-dot ${statusClass}"></span>
-        ${statusText}
-      </div>
-      ${drive.connected ? `
-        <div class="drive-storage">
-          <div class="storage-bar-bg">
-            <div class="storage-bar-fill" style="width: ${pct}%; background: ${drive.color};"></div>
-          </div>
-          <div class="storage-text">
-            <span>${drive.usedGB} GB used</span>
-            <span>${drive.totalGB} GB total</span>
-          </div>
-        </div>
-      ` : `
-        <div class="drive-storage">
-          <div style="font-size: var(--font-sm); color: var(--text-muted); margin-top: var(--space-sm);">
-            Tap to connect
-          </div>
-        </div>
-      `}
-    </div>
-  `;
-}
-
-export function bindDriveEvents(app) {
-  document.querySelectorAll('.drive-card').forEach(card => {
-    card.addEventListener('click', async (e) => {
-      const driveId = card.dataset.driveId;
-      const drive = cachedDrives.find(d => d.id === driveId);
-      if (!drive) return;
-
-      if (drive.connected) {
-        // Navigate to file browser
-        app.navigate('files', { driveId });
+    const close = () => overlay.remove();
+    document.getElementById('renameCancel').addEventListener('click', close);
+    document.getElementById('renameConfirm').addEventListener('click', async () => {
+      const newName = input.value.trim();
+      if (newName && newName !== oldName) {
+        close();
+        await this.handleRenameFile(oldName, newName);
+      } else {
+        close();
       }
     });
-  });
-}
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  },
 
-// Load drives asynchronously when the view is first shown
-export async function loadDrives(app) {
-  app.state.drivesLoading = true;
-  app.render();
-  try {
-    cachedDrives = await fetchDrives();
-  } catch (err) {
-    app.showToast(`Error loading drives: ${err.message}`);
-    cachedDrives = [];
-  }
-  app.state.drivesLoading = false;
-  app.render();
-}
+  showNewFolderDialog() {
+    const overlay = document.createElement('div');
+    overlay.className = 'dialog-overlay';
+    overlay.innerHTML = `
+      <div class="dialog">
+        <div class="dialog-title">New Folder</div>
+        <input type="text" class="dialog-input" id="folderInput" placeholder="Folder name">
+        <div class="dialog-actions">
+          <button class="dialog-btn cancel" id="folderCancel">Cancel</button>
+          <button class="dialog-btn confirm" id="folderConfirm">Create</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const input = document.getElementById('folderInput');
+    input.focus();
+
+    const close = () => overlay.remove();
+    document.getElementById('folderCancel').addEventListener('click', close);
+    document.getElementById('folderConfirm').addEventListener('click', async () => {
+      const name = input.value.trim();
+      if (name) {
+        close();
+        await this.handleCreateFolder(name);
+      } else {
+        close();
+      }
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+  },
+
+  // ── Async File Operations ────────────────────────
+
+  async handleRenameFile(oldName, newName) {
+    const driveId = this.state.params.driveId;
+    this.showToast(`Renaming "${oldName}"...`);
+
+    try {
+      await renameItem(driveId, this.state.path, oldName, newName);
+      this.showToast(`Renamed to "${newName}"`);
+      await loadFiles(this);
+    } catch (err) {
+      this.showToast(`Rename failed: ${err.message}`);
+    }
+  },
+
+  async handleDeleteFile(fileName) {
+    const driveId = this.state.params.driveId;
+    this.showToast(`Deleting "${fileName}"...`);
+
+    try {
+      await deleteItem(driveId, this.state.path, fileName);
+      this.showToast(`"${fileName}" deleted`);
+      await loadFiles(this);
+    } catch (err) {
+      this.showToast(`Delete failed: ${err.message}`);
+    }
+  },
+
+  async handleCreateFolder(name) {
+    const driveId = this.state.params.driveId;
+    this.showToast(`Creating folder "${name}"...`);
+
+    try {
+      await createFolder(driveId, this.state.path, name);
+      this.showToast(`Folder "${name}" created`);
+      await loadFiles(this);
+    } catch (err) {
+      this.showToast(`Create folder failed: ${err.message}`);
+    }
+  },
+};
+
+// Initialize – load drives after splash
+setTimeout(() => {
+  app.navigate('drives');
+}, 1600);
+
+// Clean up splash
+setTimeout(() => {
+  const splash = document.getElementById('splash');
+  if (splash) splash.remove();
+}, 2200);
