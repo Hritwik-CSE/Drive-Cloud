@@ -73,7 +73,7 @@ const app = {
     this.render();
 
     try {
-      const streamUrl = await getStreamUrl(params.driveId, params.fileName);
+      const streamUrl = await getStreamUrl(params.driveId, params.fileName, params.path);
       this.state.params.streamUrl = streamUrl;
     } catch (err) {
       this.showToast(`Error loading video: ${err.message}`);
