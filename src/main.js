@@ -4,6 +4,7 @@
 
 import { renderDriveManager, bindDriveEvents, loadDrives } from './components/DriveManager.js';
 import { renderFileBrowser, bindFileBrowserEvents, loadFiles } from './components/FileBrowser.js';
+import { renderVideoPlayer, bindVideoEvents, cleanupVideoPlayer } from './components/VideoPlayer.js';
 import { renderStorageDashboard, bindStorageEvents, loadStorage } from './components/StorageDashboard.js';
 import { renderSettings, bindSettingsEvents } from './components/Settings.js';
 import { renderAccounts, bindAccountsEvents } from './components/Accounts.js';
@@ -26,6 +27,7 @@ const app = {
     drivesLoading: false,
     filesLoading: false,
     storageLoading: false,
+    videoLoading: false,
     operationLoading: false,
     settings: {
       autoSync: true,
@@ -38,6 +40,9 @@ const app = {
   },
 
   async navigate(view, params = {}) {
+    if (this.state.currentView === 'video') {
+      cleanupVideoPlayer();
+    }
     this.state.currentView = view;
     this.state.params = params;
     if (view === 'files' && !params.preservePath) {
@@ -55,21 +60,47 @@ const app = {
       case 'storage':
         await loadStorage(this);
         break;
+      case 'video':
+        await this.loadVideo(params);
+        break;
       default:
         this.render();
     }
   },
 
+  async loadVideo(params) {
+    this.state.videoLoading = true;
+    this.render();
+
+    try {
+      const streamUrl = await getStreamUrl(params.driveId, params.fileName, params.path);
+      this.state.params.streamUrl = streamUrl;
+    } catch (err) {
+      this.showToast(`Error loading video: ${err.message}`);
+    }
+
+    this.state.videoLoading = false;
+    this.render();
+  },
+
   render() {
     const root = document.getElementById('app');
+    const isVideo = this.state.currentView === 'video';
     let content = '';
 
     switch (this.state.currentView) {
       case 'drives': content = renderDriveManager(this); break;
       case 'files': content = renderFileBrowser(this); break;
+      case 'video': content = renderVideoPlayer(this); break;
       case 'storage': content = renderStorageDashboard(this); break;
       case 'accounts': content = renderAccounts(this); break;
       case 'settings': content = renderSettings(this); break;
+    }
+
+    if (isVideo) {
+      root.innerHTML = content;
+      bindVideoEvents(this);
+      return;
     }
 
     const shellClass = this.isInitialLoad ? 'app-shell initial-load' : 'app-shell';
