@@ -96,6 +96,7 @@ function renderDriveCard(drive, index) {
             <div class="drive-email">${safeEmail}</div>
           </div>
         </div>
+        ${drive.connected ? `<button class="icon-btn logout-btn" aria-label="Logout" data-action="logout" title="Log out">${icons.logout}</button>` : ''}
       </div>
       <div class="drive-status ${statusClass}">
         <span class="status-dot ${statusClass}"></span>
@@ -124,10 +125,27 @@ function renderDriveCard(drive, index) {
 
 export function bindDriveEvents(app) {
   document.querySelectorAll('.drive-card').forEach(card => {
-    card.addEventListener('click', async () => {
+    card.addEventListener('click', async (e) => {
       const driveId = card.dataset.driveId;
       const drive = cachedDrives.find(d => d.id === driveId);
       if (!drive) return;
+
+      if (e.target.closest('.logout-btn')) {
+        e.stopPropagation();
+        if (confirm(`Are you sure you want to log out from ${drive.name}?`)) {
+          try {
+            await logout(driveId);
+            await disconnectDrive(driveId);
+            drive.connected = false;
+            // Also clean up drives storage if we need to? Or just render disconnected.
+            app.render();
+            app.showToast(`Logged out from ${drive.name}`);
+          } catch (err) {
+            app.showToast(`Logout failed: ${err.message}`);
+          }
+        }
+        return;
+      }
 
       if (drive.connected) {
         // Navigate to file browser
