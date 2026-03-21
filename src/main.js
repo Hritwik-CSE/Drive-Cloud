@@ -4,12 +4,12 @@
 
 import { renderDriveManager, bindDriveEvents, loadDrives } from './components/DriveManager.js';
 import { renderFileBrowser, bindFileBrowserEvents, loadFiles } from './components/FileBrowser.js';
-import { renderVideoPlayer, bindVideoEvents, cleanupVideoPlayer } from './components/VideoPlayer.js';
+import { renderVideoPlayer, bindVideoEvents, cleanupVideoPlayer, loadAndPlayVideo } from './components/VideoPlayer.js';
 import { renderStorageDashboard, bindStorageEvents, loadStorage } from './components/StorageDashboard.js';
 import { renderSettings, bindSettingsEvents } from './components/Settings.js';
 import { renderAccounts, bindAccountsEvents } from './components/Accounts.js';
 import { icons } from './components/icons.js';
-import { renameItem, deleteItem, createFolder, uploadFiles, getStreamUrl } from './api/drive.js';
+import { renameItem, deleteItem, createFolder, uploadFiles } from './api/drive.js';
 
 function escapeHTML(str) {
   if (!str) return '';
@@ -61,26 +61,13 @@ const app = {
         await loadStorage(this);
         break;
       case 'video':
-        await this.loadVideo(params);
+        // loadAndPlayVideo handles its own loading state + render cycle.
+        // params must contain: fileId (Drive file ID) and fileName.
+        await loadAndPlayVideo(this, params.fileId, params.fileName);
         break;
       default:
         this.render();
     }
-  },
-
-  async loadVideo(params) {
-    this.state.videoLoading = true;
-    this.render();
-
-    try {
-      const streamUrl = await getStreamUrl(params.driveId, params.fileName, params.path);
-      this.state.params.streamUrl = streamUrl;
-    } catch (err) {
-      this.showToast(`Error loading video: ${err.message}`);
-    }
-
-    this.state.videoLoading = false;
-    this.render();
   },
 
   render() {
