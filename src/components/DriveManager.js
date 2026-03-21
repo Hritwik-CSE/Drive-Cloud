@@ -3,8 +3,7 @@
 // ========================================
 
 import { icons } from './icons.js';
-import { login, logout, isAuthenticated, getAuthEmail } from '../api/auth.js';
-import { fetchDrives, connectDrive, disconnectDrive } from '../api/drive.js';
+import { fetchDrives } from '../api/drive.js';
 
 // Cache drives so we can re-render without re-fetching
 let cachedDrives = [];
@@ -62,15 +61,8 @@ export function renderDriveManager(app) {
 
       <div class="section-title">Connected Drives</div>
       <div class="drives-grid">
-        ${drives.filter(d => d.connected).map((drive, i) => renderDriveCard(drive, i)).join('')}
+        ${drives.length > 0 ? drives.map((drive, i) => renderDriveCard(drive, i)).join('') : '<div style="color: var(--text-muted); font-size: var(--font-sm);">No drives connected. Go to Accounts to add one.</div>'}
       </div>
-
-      ${drives.some(d => !d.connected) ? `
-        <div class="section-title" style="margin-top: var(--space-2xl);">Available Drives</div>
-        <div class="drives-grid">
-          ${drives.filter(d => !d.connected).map((drive, i) => renderDriveCard(drive, i + connectedCount)).join('')}
-        </div>
-      ` : ''}
     </div>
   `;
 }
@@ -96,7 +88,6 @@ function renderDriveCard(drive, index) {
             <div class="drive-email">${safeEmail}</div>
           </div>
         </div>
-        ${drive.connected ? `<button class="icon-btn logout-btn" aria-label="Logout" data-action="logout" title="Log out">${icons.logout}</button>` : ''}
       </div>
       <div class="drive-status ${statusClass}">
         <span class="status-dot ${statusClass}"></span>
@@ -130,43 +121,9 @@ export function bindDriveEvents(app) {
       const drive = cachedDrives.find(d => d.id === driveId);
       if (!drive) return;
 
-      if (e.target.closest('.logout-btn')) {
-        e.stopPropagation();
-        if (confirm(`Are you sure you want to log out from ${drive.name}?`)) {
-          try {
-            await logout(driveId);
-            await disconnectDrive(driveId);
-            drive.connected = false;
-            // Also clean up drives storage if we need to? Or just render disconnected.
-            app.render();
-            app.showToast(`Logged out from ${drive.name}`);
-          } catch (err) {
-            app.showToast(`Logout failed: ${err.message}`);
-          }
-        }
-        return;
-      }
-
       if (drive.connected) {
         // Navigate to file browser
         app.navigate('files', { driveId });
-      } else {
-        // Connect: authenticate then connect
-        card.style.opacity = '0.6';
-        card.style.pointerEvents = 'none';
-        app.showToast(`Connecting to ${drive.name}...`);
-
-        try {
-          await login(driveId);
-          await connectDrive(driveId);
-          drive.connected = true;
-          app.render();
-          app.showToast(`${drive.name} connected!`);
-        } catch (err) {
-          app.showToast(`Failed to connect: ${err.message}`);
-          card.style.opacity = '1';
-          card.style.pointerEvents = 'auto';
-        }
       }
     });
   });
@@ -185,3 +142,4 @@ export async function loadDrives(app) {
   app.state.drivesLoading = false;
   app.render();
 }
+
