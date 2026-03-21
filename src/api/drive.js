@@ -133,17 +133,15 @@ export async function fetchContents(driveId, path = []) {
     // For root: folderId = 'root', for subfolders: resolve path to get folder ID
     const folderId = path.length === 0 ? 'root' : await resolveFolderId(driveId, path);
 
+    const query = `'${folderId}' in parents and trashed=false`;
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?` +
-      `q='${folderId}'+in+parents+and+trashed=false` +
-      `&fields=files(id,name,mimeType,size,modifiedTime)` +
-      `&orderBy=folder,name` +
-      `&pageSize=100`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,mimeType,size,modifiedTime)&orderBy=folder,name&pageSize=100`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const data = await res.json();
+    const filesList = data.files || [];
 
-    return data.files.map(f => ({
+    const mappedFiles = filesList.map(f => ({
       id: f.id,
       name: f.name,
       type: mapMimeType(f.mimeType),
@@ -152,6 +150,25 @@ export async function fetchContents(driveId, path = []) {
       isFolder: f.mimeType === 'application/vnd.google-apps.folder',
       children: [],
     }));
+
+    // Fetch child counts for folders
+    await Promise.all(mappedFiles.filter(f => f.isFolder).map(async f => {
+      try {
+        const q = `'${f.id}' in parents and trashed=false`;
+        const countRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1000`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const countData = await countRes.json();
+        if (countData.files) {
+          f.children = new Array(countData.files.length);
+        }
+      } catch (err) {
+        console.error('Failed to fetch count for folder:', f.name, err);
+      }
+    }));
+
+    return mappedFiles;
 
   }
 }
@@ -188,12 +205,13 @@ export async function renameItem(driveId, path, oldName, newName) {
 }
 
 async function findItemByName(token, parentId, name) {
+  const query = `'${parentId}' in parents and name='${name.replace(/'/g, "\\'")}' and trashed=false`;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+name='${name}'+and+trashed=false&fields=files(id)`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   const data = await res.json();
-  return data.files[0];
+  return data.files ? data.files[0] : null;
 }
 
 export async function deleteItem(driveId, path, fileName) {
@@ -282,7 +300,7 @@ export async function uploadFiles(driveId, path, fileList) {
 
 // ── Video Streaming ────────────────────────────────────
 
-export async function getStreamUrl(driveId, fileName) {
+export async function getStreamUrl(driveId, fileName, path = []) {
   if (config.useSimulatedApi) {
     await simulateDelay();
     // Map to sample video URLs
@@ -366,14 +384,13 @@ async function resolveFolderId(driveId, path) {
   let folderId = 'root';
   const token = getToken(driveId);
   for (const folderName of path) {
+    const query = `'${folderId}' in parents and name='${folderName.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?` +
-      `q='${folderId}'+in+parents+and+name='${folderName}'+and+mimeType='application/vnd.google-apps.folder'` +
-      `&fields=files(id)`,
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const data = await res.json();
-    if (data.files.length === 0) throw new Error(`Folder "${folderName}" not found`);
+    if (!data.files || data.files.length === 0) throw new Error(`Folder "${folderName}" not found`);
     folderId = data.files[0].id;
   }
   return folderId;
