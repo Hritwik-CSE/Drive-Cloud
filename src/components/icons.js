@@ -91,3 +91,4 @@ export function getFileIcon(type) {
   };
   return map[type] || icons.files;
 }
+
