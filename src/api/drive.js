@@ -193,7 +193,7 @@ export async function renameItem(driveId, path, oldName, newName) {
     
     if (!item) throw new Error('File not found');
 
-    await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -201,6 +201,7 @@ export async function renameItem(driveId, path, oldName, newName) {
       },
       body: JSON.stringify({ name: newName }),
     });
+    if (!res.ok) throw new Error(`Rename failed: ${await res.text()}`);
   }
 }
 
@@ -230,10 +231,11 @@ export async function deleteItem(driveId, path, fileName) {
     const item = await findItemByName(token, parentId, fileName);
     if (!item) throw new Error('File not found');
 
-    await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (!res.ok) throw new Error(`Delete failed: ${await res.text()}`);
   }
 }
 
@@ -254,7 +256,7 @@ export async function createFolder(driveId, path, folderName) {
     const token = requireAuth(driveId);
     const parentId = path.length === 0 ? 'root' : await resolveFolderId(driveId, path);
 
-    await fetch('https://www.googleapis.com/drive/v3/files', {
+    const res = await fetch('https://www.googleapis.com/drive/v3/files', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -266,6 +268,7 @@ export async function createFolder(driveId, path, folderName) {
         parents: [parentId],
       }),
     });
+    if (!res.ok) throw new Error(`Create folder failed: ${await res.text()}`);
   }
 }
 
@@ -289,11 +292,12 @@ export async function uploadFiles(driveId, path, fileList) {
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', file);
 
-    await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: form
     });
+    if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`);
   }
   return { success: true, count: fileList.length };
 }
