@@ -61,9 +61,10 @@ const app = {
         await loadStorage(this);
         break;
       case 'video':
-        // loadAndPlayVideo handles its own loading state + render cycle.
-        // params must contain: fileId (Drive file ID) and fileName.
-        await loadAndPlayVideo(this, params.fileId, params.fileName);
+        // Just render – streamUrl is already in params (set by loadAndPlayVideo).
+        // Never call loadAndPlayVideo here: that function calls navigate() itself
+        // after fetching the URL, which would cause infinite recursion.
+        this.render();
         break;
       default:
         this.render();
