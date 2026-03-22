@@ -18,7 +18,7 @@ export const config = {
 
 
   // Simulated mode: set to false when you have real API keys above
-  useSimulatedApi: true,
+  useSimulatedApi: false,
 
   // Simulated network latency range (ms) for realistic feel
   simulatedLatency: { min: 400, max: 1200 },
