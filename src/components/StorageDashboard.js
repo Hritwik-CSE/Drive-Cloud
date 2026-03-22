@@ -36,49 +36,50 @@ export function renderStorageDashboard(app) {
       </div>
     </div>
     <div class="app-content">
-      <div class="storage-section animate-in">
-        <div class="section-title">Total Usage</div>
-        <div class="donut-container">
-          <div class="donut-chart">
-            ${renderDonut(totalUsed, totalSpace, '#6C5CE7')}
-            <div class="donut-center">
-              <div class="donut-value">${totalSpace > 0 ? Math.round((totalUsed / totalSpace) * 100) : 0}%</div>
-              <div class="donut-label">${totalUsed.toFixed(1)} / ${totalSpace} GB</div>
-            </div>
-          </div>
+      <div class="storage-card storage-hero animate-in">
+        <div class="storage-header">
+          <div class="storage-title">Total Usage</div>
+          <div class="storage-subtitle">${totalUsed.toFixed(1)} GB / ${totalSpace} GB</div>
+        </div>
+        <div class="storage-multi-bar">
+          <div class="multi-bar-segment" style="width: ${totalSpace > 0 ? (totalUsed / totalSpace) * 100 : 0}%; background: var(--accent-gradient);"></div>
         </div>
       </div>
 
-      ${connectedDrives.map((drive, i) => `
-        <div class="storage-section animate-in stagger-${i + 1}">
-          <div class="section-title">${drive.icon} ${drive.name}</div>
-          <div class="donut-container">
-            <div class="donut-chart">
-              ${renderDonut(drive.usedGB, drive.totalGB, drive.color)}
-              <div class="donut-center">
-                <div class="donut-value">${drive.usedGB}</div>
-                <div class="donut-label">of ${drive.totalGB} GB</div>
-              </div>
-            </div>
+      ${connectedDrives.map((drive, i) => {
+        const breakdown = cachedBreakdowns[drive.id] || [];
+        const usedPct = drive.totalGB > 0 ? (drive.usedGB / drive.totalGB) * 100 : 0;
+        
+        return `
+        <div class="storage-card animate-in stagger-${i + 1}">
+          <div class="storage-header">
+            <div class="storage-title">${drive.icon} ${drive.name}</div>
+            <div class="storage-subtitle">${drive.usedGB.toFixed(1)} GB of ${drive.totalGB} GB</div>
           </div>
-          ${cachedBreakdowns[drive.id] ? `
+          
+          <div class="storage-multi-bar">
+            ${breakdown.length > 0 ? breakdown.map(item => `
+              <div class="multi-bar-segment" style="width: ${item.percentage}%; background: ${item.color};" title="${item.label}"></div>
+            `).join('') : `
+              <div class="multi-bar-segment" style="width: ${usedPct}%; background: ${drive.color};"></div>
+            `}
+          </div>
+
+          ${breakdown.length > 0 ? `
             <div class="storage-breakdown">
-              ${cachedBreakdowns[drive.id].map(item => `
+              ${breakdown.map(item => `
                 <div class="breakdown-item">
                   <div class="breakdown-color" style="background: ${item.color};"></div>
                   <div class="breakdown-info">
                     <div class="breakdown-label">${item.label}</div>
                     <div class="breakdown-size">${item.size}</div>
                   </div>
-                  <div class="breakdown-bar">
-                    <div class="breakdown-bar-fill" style="width: ${item.percentage}%; background: ${item.color};"></div>
-                  </div>
                 </div>
               `).join('')}
             </div>
           ` : ''}
         </div>
-      `).join('')}
+      `}).join('')}
     </div>
   `;
 }
