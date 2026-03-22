@@ -23,7 +23,7 @@ const app = {
     currentView: 'drives',
     params: {},
     path: [],
-    viewMode: 'grid',
+    viewMode: 'list',
     drivesLoading: false,
     filesLoading: false,
     storageLoading: false,
@@ -32,7 +32,7 @@ const app = {
     settings: {
       autoSync: true,
       wifiOnly: false,
-      gridDefault: true,
+      gridDefault: false,
       thumbnails: true,
       autoPlay: true,
       pipEnabled: true,
