@@ -353,24 +353,10 @@ export async function getStreamUrl(fileId, driveId = null) {
 
   if (!token) throw new Error('No authenticated Google Drive account can access this file.');
 
-  // Build a direct-download URL.
-  // Using ?alt=media forces binary download (streams fine in <video>).
-  // The Authorization header cannot be set on a <video src>, so we must use
-  // a short-lived URL approach: fetch as a blob and create an object URL.
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&acknowledgeAbuse=true`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`Drive stream error ${res.status}: ${errText}`);
-  }
-
-  // Convert the authenticated response to a blob URL the <video> element can
-  // play without needing auth headers (blob URLs are same-origin safe).
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
+  // Build backend stream URL.
+  // We use our local Node.js backend that handles FFmpeg transcoding to HLS.
+  const backendUrl = `http://localhost:3000/api/video/${fileId}/index.m3u8?token=${encodeURIComponent(token)}`;
+  return backendUrl;
 }
 // ── Drive Connection ───────────────────────────────────
 
