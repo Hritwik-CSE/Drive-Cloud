@@ -4,10 +4,12 @@
 
 import Plyr from 'plyr';
 import 'plyr/dist/plyr.css';
+import Hls from 'hls.js';
 import { icons } from './icons.js';
 import { getStreamUrl } from '../api/drive.js';
 
 let player = null;
+let hlsInstance = null;
 let currentRotation = 0;
 
 // ---------------------------------------------------------------------------
@@ -100,9 +102,7 @@ export function renderVideoPlayer(app) {
         <div id="videoTransformWrapper"
              style="transition:transform 0.3s ease;display:flex;justify-content:center;
                     align-items:center;width:100%;height:100%;">
-          <!-- type attribute added so the browser can immediately detect unsupported codecs -->
-          <video id="videoEl" playsinline style="max-width:100%;max-height:100%;">
-            <source src="${videoUrl}" type="${mimeType}" />
+          <video id="videoEl" playsinline crossorigin="anonymous" style="max-width:100%;max-height:100%;">
           </video>
         </div>
       </div>
@@ -159,8 +159,7 @@ export function bindVideoEvents(app) {
   const header    = document.getElementById('videoHeader');
   const container = document.getElementById('videoContainer');
 
-  // ── Initialise Plyr ───────────────────────────────────────────────────────
-  player = new Plyr(videoEl, {
+  const plyrOptions = {
     controls: [
       'play-large', 'play', 'progress', 'current-time', 'duration',
       'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen',
@@ -168,69 +167,98 @@ export function bindVideoEvents(app) {
     settings: ['captions', 'quality', 'speed'],
     speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
     autoplay: true,
-    // Disable keyboard shortcuts that conflict with the page
     keyboard: { focused: true, global: false },
-  });
+  };
 
-  // FIX: autoplay – only attempt after the player signals it is truly ready
-  player.on('ready', () => {
-    player.play().catch((err) => {
-      // Autoplay was blocked (browser policy) – that's fine, user can press play
-      console.info('[VideoPlayer] Autoplay blocked:', err.message);
-    });
-  });
-
-  // ── FIX: Use Plyr's error event, not the raw <video> error event.
-  //    Plyr replaces/wraps the original element so native listeners are unreliable.
-  // ──────────────────────────────────────────────────────────────────────────
-  player.on('error', () => {
-    const mediaErr = player.media && player.media.error;
-    const code = mediaErr ? mediaErr.code : 0;
-
-    if (code === 4 /* MEDIA_ERR_SRC_NOT_SUPPORTED */) {
-      _handleUnsupportedFormat(app);
-    } else {
-      // FIX: Try refreshing the stream URL before giving up (covers expired tokens)
-      _tryRefreshAndReload(app).catch(() => {
-        app.showToast('Error loading video. Please try again.');
+  const initPlayerEvents = () => {
+    player.on('ready', () => {
+      player.play().catch((err) => {
+        console.info('[VideoPlayer] Autoplay blocked:', err.message);
       });
-    }
-  });
+    });
 
-  // ── Header auto-hide ──────────────────────────────────────────────────────
-  let headerTimeout;
+    player.on('error', () => {
+      const mediaErr = player.media && player.media.error;
+      const code = mediaErr ? mediaErr.code : 0;
+      if (code === 4) {
+        _handleUnsupportedFormat(app);
+      } else {
+        _tryRefreshAndReload(app).catch(() => {
+          app.showToast('Error loading video. Please try again.');
+        });
+      }
+    });
 
-  const showHeader = () => {
-    header.style.opacity = '1';
-    header.style.pointerEvents = 'auto';
-  };
+    let headerTimeout;
+    const showHeader = () => {
+      header.style.opacity = '1';
+      header.style.pointerEvents = 'auto';
+    };
+    const hideHeader = () => {
+      header.style.opacity = '0';
+      header.style.pointerEvents = 'none';
+    };
+    const resetHeaderTimeout = () => {
+      showHeader();
+      clearTimeout(headerTimeout);
+      headerTimeout = setTimeout(() => {
+        if (player && !player.paused) hideHeader();
+      }, 3000);
+    };
 
-  const hideHeader = () => {
-    header.style.opacity = '0';
-    header.style.pointerEvents = 'none';
-  };
+    container.addEventListener('mousemove', resetHeaderTimeout);
+    container.addEventListener('touchstart', resetHeaderTimeout, { passive: true });
 
-  const resetHeaderTimeout = () => {
-    showHeader();
-    clearTimeout(headerTimeout);
-    headerTimeout = setTimeout(() => {
+    player.on('play',  resetHeaderTimeout);
+    player.on('pause', () => {
+      clearTimeout(headerTimeout);
+      showHeader();
+    });
+    player.on('controlshidden', () => {
       if (player && !player.paused) hideHeader();
-    }, 3000);
+    });
+    player.on('controlsshown', resetHeaderTimeout);
   };
 
-  // FIX: mouse movement over the video container also resets the hide timer
-  container.addEventListener('mousemove', resetHeaderTimeout);
-  container.addEventListener('touchstart', resetHeaderTimeout, { passive: true });
+  const streamUrl = app.state.params.streamUrl;
 
-  player.on('play',  resetHeaderTimeout);
-  player.on('pause', () => {
-    clearTimeout(headerTimeout);
-    showHeader();
-  });
-  player.on('controlshidden', () => {
-    if (player && !player.paused) hideHeader();
-  });
-  player.on('controlsshown', resetHeaderTimeout);
+  if (Hls.isSupported()) {
+    hlsInstance = new Hls();
+    hlsInstance.loadSource(streamUrl);
+    hlsInstance.attachMedia(videoEl);
+
+    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      player = new Plyr(videoEl, plyrOptions);
+      initPlayerEvents();
+    });
+
+    hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hlsInstance.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hlsInstance.recoverMediaError();
+            break;
+          default:
+            hlsInstance.destroy();
+            _tryRefreshAndReload(app).catch(() => app.showToast('Error loading video.'));
+            break;
+        }
+      }
+    });
+  } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+    // Fallback for native HLS (e.g. Safari)
+    videoEl.src = streamUrl;
+    player = new Plyr(videoEl, plyrOptions);
+    initPlayerEvents();
+  } else {
+    // Fallback? Will likely fail if not HLS compatible and serving m3u8.
+    videoEl.src = streamUrl;
+    player = new Plyr(videoEl, plyrOptions);
+    initPlayerEvents();
+  }
 
   // ── Close ─────────────────────────────────────────────────────────────────
   closeBtn.addEventListener('click', () => {
@@ -302,6 +330,10 @@ export function cleanupVideoPlayer() {
   if (player) {
     player.destroy();
     player = null;
+  }
+  if (hlsInstance) {
+    hlsInstance.destroy();
+    hlsInstance = null;
   }
   currentRotation = 0;   // FIX: reset so re-opening starts upright
 }
